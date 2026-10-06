@@ -28,9 +28,13 @@ FLAG_END_STREAM = 0x01
 METHOD_GET = 0x01
 
 # Status codes
-STATUS_OK          = 200
-STATUS_BAD_REQUEST = 400
-STATUS_NOT_FOUND   = 404
+STATUS_OK             = 200
+STATUS_BAD_REQUEST    = 400
+STATUS_NOT_FOUND      = 404
+STATUS_INTERNAL_ERROR = 500
+
+# ERROR frame error codes
+ERR_PROTOCOL = 1
 
 _HEADER_STRUCT = struct.Struct(">IBBHI")  # length u32, type u8, flags u8, reserved u16, stream_id u32
 
@@ -168,6 +172,8 @@ def parse_request_payload(payload: bytes) -> tuple[int, str, list[tuple[str, str
     offset += path_len
     if not path.startswith("/"):
         raise ValueError("path does not begin with '/'")
+    if "\x00" in path:
+        raise ValueError("path contains NUL byte")
     if offset + 1 > len(payload):
         raise ValueError("header count missing")
     hdr_count = payload[offset]

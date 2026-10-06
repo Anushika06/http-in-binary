@@ -12,8 +12,9 @@ import sys
 
 from bhtp.protocol import (
     TYPE_REQUEST, TYPE_RESPONSE, TYPE_DATA, TYPE_ERROR,
+    ERR_PROTOCOL,
     METHOD_GET, FLAG_END_STREAM,
-    STATUS_OK, STATUS_BAD_REQUEST, STATUS_NOT_FOUND,
+    STATUS_OK, STATUS_BAD_REQUEST, STATUS_NOT_FOUND, STATUS_INTERNAL_ERROR,
     MAX_PAYLOAD,
     encode_response, encode_data, encode_error,
     parse_request_payload,
@@ -31,7 +32,11 @@ def _safe_path(docroot: str, request_path: str) -> str | None:
     """
     # Strip leading slash; os.path.join ignores docroot if path is absolute.
     rel = request_path.lstrip("/")
-    candidate = os.path.realpath(os.path.join(docroot, rel))
+    try:
+        candidate = os.path.realpath(os.path.join(docroot, rel))
+    except ValueError:
+        # os.path.realpath raises ValueError on paths containing NUL bytes.
+        return None
     root = os.path.realpath(docroot)
     if not candidate.startswith(root + os.sep) and candidate != root:
         return None
@@ -50,7 +55,13 @@ def _send_all(sock: socket.socket, data: bytes) -> None:
 
 
 def _serve_file(sock: socket.socket, filepath: str, stream_id: int) -> None:
-    size = os.path.getsize(filepath)
+    try:
+        size = os.path.getsize(filepath)
+        f = open(filepath, "rb")
+    except OSError:
+        _send_all(sock, encode_response(STATUS_INTERNAL_ERROR, [], stream_id, end_stream=True))
+        return
+
     mime, _ = mimetypes.guess_type(filepath)
     if mime is None:
         mime = "application/octet-stream"
@@ -60,7 +71,7 @@ def _serve_file(sock: socket.socket, filepath: str, stream_id: int) -> None:
         ("content-length", str(size)),
     ]
 
-    with open(filepath, "rb") as f:
+    with f:
         first_chunk = f.read(_CHUNK_SIZE)
         remaining = size - len(first_chunk)
 
@@ -82,28 +93,43 @@ def _serve_file(sock: socket.socket, filepath: str, stream_id: int) -> None:
             _send_all(sock, encode_data(chunk, stream_id, end_stream=(remaining <= 0)))
 
 
+_CONTINUE = 0
+_CLOSE    = 1
+
+
 def _handle_request(sock: socket.socket, docroot: str,
-                    ftype: int, flags: int, stream_id: int, payload: bytes) -> None:
+                    ftype: int, flags: int, stream_id: int, payload: bytes) -> int:
+    """Handle one frame. Returns _CLOSE if the connection must be shut down."""
+    if ftype == TYPE_ERROR:
+        # Peer signalled a fatal error; close without replying.
+        return _CLOSE
+
     if ftype != TYPE_REQUEST:
-        # Unknown frame type — already consumed by length in read_frame(); nothing more to do.
-        return
+        # Unknown frame type — already consumed by length in read_frame(); skip.
+        return _CONTINUE
+
+    if stream_id == 0:
+        # REQUEST on stream 0 violates the protocol (SPEC §2.4).
+        _send_all(sock, encode_error(ERR_PROTOCOL, "REQUEST on stream 0"))
+        return _CLOSE
 
     try:
         method, path, _ = parse_request_payload(payload)
-    except ValueError as e:
+    except ValueError:
         _send_all(sock, encode_response(STATUS_BAD_REQUEST, [], stream_id, end_stream=True))
-        return
+        return _CONTINUE
 
     if method != METHOD_GET:
         _send_all(sock, encode_response(STATUS_BAD_REQUEST, [], stream_id, end_stream=True))
-        return
+        return _CONTINUE
 
     filepath = _safe_path(docroot, path)
     if filepath is None or not os.path.isfile(filepath):
         _send_all(sock, encode_response(STATUS_NOT_FOUND, [], stream_id, end_stream=True))
-        return
+        return _CONTINUE
 
     _serve_file(sock, filepath, stream_id)
+    return _CONTINUE
 
 
 def _handle_connection(sock: socket.socket, addr: tuple, docroot: str) -> None:
@@ -115,14 +141,15 @@ def _handle_connection(sock: socket.socket, addr: tuple, docroot: str) -> None:
                 frame = reader.read_frame()
             except ValueError as e:
                 # Payload length exceeded limit; cannot recover frame boundary.
-                _send_all(sock, encode_error(STATUS_BAD_REQUEST, str(e)))
+                _send_all(sock, encode_error(ERR_PROTOCOL, str(e)))
                 break
 
             if frame is None:
                 break  # clean EOF
 
             ftype, flags, stream_id, payload = frame
-            _handle_request(sock, docroot, ftype, flags, stream_id, payload)
+            if _handle_request(sock, docroot, ftype, flags, stream_id, payload) == _CLOSE:
+                break
 
     except (ConnectionError, BrokenPipeError, OSError):
         pass
