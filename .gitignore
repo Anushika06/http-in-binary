@@ -1,0 +1,14 @@
+# Cloned third-party client repo used for compatibility testing only
+client_repo/
+
+# Scratch directory: raw wire captures and one-off helper scripts
+scratch/
+
+# Test artefacts created by test runs
+output.bin
+secret.txt
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
