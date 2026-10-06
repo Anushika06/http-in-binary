@@ -83,3 +83,13 @@ See [`docs/annotated-hexdump.md`](docs/annotated-hexdump.md) for a byte-annotate
 | Multiple requests, one session | `bcurl.py 127.0.0.1:9000/hello.txt /hello.txt`         |
 | Unknown frame type skipped     | Inject a frame with type 0x99 before a valid REQUEST    |
 | Path traversal blocked (404)   | `bcurl.py "127.0.0.1:9000/../secret.txt"`              |
+
+---
+
+## Testing
+
+| Server | Client |
+| :---: | :---: |
+| ![Screenshot 1](docs/screenshot1.png) | ![Screenshot 2](docs/screenshot2.png) |
+
+*The server communicating with the provided BHTTP/1 client over a persistent TCP connection.*
