@@ -88,7 +88,7 @@ Offset   Hex                    Field
          42 48 54 50 2F 31 21
          0A
 027-...  54 68 69 73 20 ...     "This is a plain-text file..."  (remaining 125 bytes)
-148-151  2E 0A                  ".\n"  (final 2 bytes of file, offset 151 = 12 + 139)
+150-151  2E 0A                  ".\n"  (final 2 bytes of file, offset 151 = 12 + 139)
 ```
 
 Total on wire: **12 bytes header + 140 bytes payload = 152 bytes**

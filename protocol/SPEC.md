@@ -78,7 +78,7 @@ Frame Header (12 bytes)
 
 Payload
   1 byte   Method       (0x01 = GET)
-  2 bytes  Path Length  (u16, number of UTF-8 bytes in path; 1–4096)
+  2 bytes  Path Length  (u16, number of UTF-8 bytes in path; >= 1)
   N bytes  Path         (UTF-8, must begin with '/')
   1 byte   Header Count (0–31)
   [Header Count × encoded header]
@@ -90,7 +90,7 @@ See §6 for header encoding.
 
 | Field         | Limit                                    |
 |---------------|------------------------------------------|
-| Path Length   | 1–4096 bytes (0 is rejected as malformed)|
+| Path Length   | ≥ 1 byte (0 is rejected as malformed)    |
 | Header Count  | 0–31 (>31 is rejected as malformed)      |
 | Payload size  | 0–16384 bytes (enforced by frame reader) |
 | Path bytes    | Must be valid UTF-8 (strict)             |
@@ -244,7 +244,7 @@ Error responses (400, 404, 500) are a single RESPONSE frame with `END_STREAM = 1
 
 ## 11. Path Security
 
-The server resolves request paths under the document root using `os.path.realpath`. Any path that resolves outside the document root (e.g., `/../secret.txt`) or contains a NUL byte returns 404.
+The server resolves request paths under the document root using `os.path.realpath`. Any path that resolves outside the document root (e.g., `/../secret.txt`) returns 404. Any path containing a NUL byte returns 400.
 
 ---
 
