@@ -88,7 +88,7 @@ See [`docs/annotated-hexdump.md`](docs/annotated-hexdump.md) for a byte-annotate
 
 ## Testing
 
-| Server | Client |
+| Server - Client | Server - Client |
 | :---: | :---: |
 | ![Screenshot 1](docs/screenshot1.png) | ![Screenshot 2](docs/screenshot2.png) |
 
